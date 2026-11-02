@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { RATIOS, generateImage } from './providers.js';
+import { formatIDR, formatTokens, formatUSD, resolveCost } from './usage.js';
 
-export default function Playground({ provider, config, textOutput }) {
+export default function Playground({ provider, config, textOutput, price, idrRate, onRecord }) {
   const [prompt, setPrompt] = useState('');
   const [ratio, setRatio] = useState('1:1');
   const [loading, setLoading] = useState(false);
@@ -16,20 +17,39 @@ export default function Playground({ provider, config, textOutput }) {
     setError('');
     const started = performance.now();
     try {
-      const images = await generateImage(provider, config.baseUrl, config.apiKey, {
+      const { images, usage } = await generateImage(provider, config.baseUrl, config.apiKey, {
         model: config.model,
         prompt: prompt.trim(),
         ratio,
         textOutput,
       });
       const seconds = ((performance.now() - started) / 1000).toFixed(1);
+      const cost = resolveCost(usage, price);
+      const id = `${Date.now()}`;
+
+      onRecord({
+        id,
+        time: new Date().toISOString(),
+        provider: provider.name,
+        model: config.model,
+        ratio,
+        inputTokens: usage?.inputTokens ?? null,
+        outputTokens: usage?.outputTokens ?? null,
+        totalTokens: usage?.totalTokens ?? null,
+        cost: cost?.amount ?? null,
+        costKind: cost?.kind ?? null,
+      });
+
       const batch = images.map((src, i) => ({
-        id: `${Date.now()}-${i}`,
+        id: `${id}-${i}`,
         src,
         prompt: prompt.trim(),
         model: config.model,
         provider: provider.name,
         seconds,
+        usage,
+        cost,
+        batchSize: images.length,
       }));
       setResults((r) => [...batch, ...r]);
     } catch (err) {
@@ -97,6 +117,7 @@ export default function Playground({ provider, config, textOutput }) {
                 <p className="muted small">
                   {r.provider} · {r.model} · {r.seconds}s
                 </p>
+                <UsageLine usage={r.usage} cost={r.cost} idrRate={idrRate} batchSize={r.batchSize} />
                 <a href={r.src} download={`image-${r.id}.png`} target="_blank" rel="noreferrer">
                   Download
                 </a>
@@ -106,5 +127,36 @@ export default function Playground({ provider, config, textOutput }) {
         </div>
       )}
     </section>
+  );
+}
+
+function UsageLine({ usage, cost, idrRate, batchSize }) {
+  if (!usage) {
+    return <p className="usage-line muted small">Token: provider tidak melaporkan token</p>;
+  }
+  return (
+    <div className="usage-line small">
+      <p>
+        Token: {formatTokens(usage.inputTokens)} in · {formatTokens(usage.outputTokens)} out ·{' '}
+        <strong>{formatTokens(usage.totalTokens)}</strong> total
+        {batchSize > 1 && <span className="muted"> (untuk {batchSize} gambar)</span>}
+      </p>
+      <p>
+        Biaya:{' '}
+        {cost ? (
+          <>
+            <strong>{formatUSD(cost.amount)}</strong>{' '}
+            <span className={`badge badge-${cost.kind}`}>{cost.kind === 'actual' ? 'aktual' : 'perkiraan'}</span>{' '}
+            ≈ {formatIDR(cost.amount, idrRate)}
+          </>
+        ) : (
+          <span className="muted">harga model belum diisi</span>
+        )}
+      </p>
+      <details>
+        <summary className="muted">usage mentah</summary>
+        <pre>{JSON.stringify(usage.raw, null, 2)}</pre>
+      </details>
+    </div>
   );
 }

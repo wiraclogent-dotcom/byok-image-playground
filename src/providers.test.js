@@ -31,6 +31,14 @@ describe('parseModels', () => {
     expect(models.filter((m) => m.isImage).map((m) => m.id)).toEqual(['dall-e-3', 'gpt-image-2']);
   });
 
+  it('converts OpenRouter per-token pricing to USD per 1M tokens', () => {
+    const [m] = parseModels({
+      data: [{ id: 'g/img', architecture: { output_modalities: ['image'] }, pricing: { prompt: '0.0000003', completion: '0.00003' } }],
+    });
+    expect(m.price).toEqual({ input: 0.3, output: 30 });
+    expect(parseModels({ data: [{ id: 'gpt-image-2' }] })[0].price).toBeNull();
+  });
+
   it('returns [] for unexpected shapes', () => {
     expect(parseModels(null)).toEqual([]);
     expect(parseModels({ data: 'nope' })).toEqual([]);
@@ -52,9 +60,11 @@ describe('extractImages', () => {
 });
 
 describe('errorMessage', () => {
-  it('prefers error.message and truncates', () => {
+  it('prefers error.message and only truncates very long bodies', () => {
     expect(errorMessage(401, { error: { message: 'bad key' } })).toBe('HTTP 401: bad key');
-    expect(errorMessage(500, { raw: 'x'.repeat(500) })).toHaveLength('HTTP 500: '.length + 300);
+    const long = 'x'.repeat(600);
+    expect(errorMessage(400, { error: { message: long } })).toBe(`HTTP 400: ${long}`);
+    expect(errorMessage(500, { raw: 'x'.repeat(5000) })).toHaveLength('HTTP 500: '.length + 1500);
     expect(errorMessage(404, {})).toBe('HTTP 404');
   });
 });
@@ -88,9 +98,11 @@ describe('network calls', () => {
   });
 
   it('generateImage (openai style) posts to /images/generations with size', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse(200, { data: [{ b64_json: 'ZZZ' }] }));
+    const fetchMock = vi.fn(async () =>
+      jsonResponse(200, { data: [{ b64_json: 'ZZZ' }], usage: { input_tokens: 5, output_tokens: 100, total_tokens: 105 } })
+    );
     vi.stubGlobal('fetch', fetchMock);
-    const imgs = await generateImage(PROVIDERS.semutssh, 'https://ai.semutssh.com', 'k', {
+    const { images, usage } = await generateImage(PROVIDERS.semutssh, 'https://ai.semutssh.com', 'k', {
       model: 'gpt-image-2',
       prompt: 'cat',
       ratio: '3:2',
@@ -98,15 +110,25 @@ describe('network calls', () => {
     const [url, opts] = fetchMock.mock.calls[0];
     expect(url).toBe('https://ai.semutssh.com/images/generations');
     expect(JSON.parse(opts.body)).toEqual({ model: 'gpt-image-2', prompt: 'cat', size: '1536x1024', n: 1 });
-    expect(imgs).toEqual(['data:image/png;base64,ZZZ']);
+    expect(images).toEqual(['data:image/png;base64,ZZZ']);
+    expect(usage).toMatchObject({ inputTokens: 5, outputTokens: 100, totalTokens: 105, cost: null });
+  });
+
+  it('generateImage returns usage: null when provider omits it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { data: [{ url: 'https://x/a.png' }] })));
+    const res = await generateImage(PROVIDERS.semutssh, 'https://a', 'k', { model: 'm', prompt: 'p', ratio: '1:1' });
+    expect(res).toEqual({ images: ['https://x/a.png'], usage: null });
   });
 
   it('generateImage (openrouter) uses chat/completions with modalities', async () => {
     const fetchMock = vi.fn(async () =>
-      jsonResponse(200, { choices: [{ message: { images: [{ image_url: { url: 'data:image/png;base64,Q' } }] } }] })
+      jsonResponse(200, {
+        choices: [{ message: { images: [{ image_url: { url: 'data:image/png;base64,Q' } }] } }],
+        usage: { prompt_tokens: 8, completion_tokens: 1290, total_tokens: 1298, cost: 0.039 },
+      })
     );
     vi.stubGlobal('fetch', fetchMock);
-    await generateImage(PROVIDERS.openrouter, PROVIDERS.openrouter.baseUrl, 'k', {
+    const { usage } = await generateImage(PROVIDERS.openrouter, PROVIDERS.openrouter.baseUrl, 'k', {
       model: 'flux/pro',
       prompt: 'dog',
       ratio: '1:1',
@@ -114,7 +136,13 @@ describe('network calls', () => {
     });
     const [url, opts] = fetchMock.mock.calls[0];
     expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
-    expect(JSON.parse(opts.body)).toMatchObject({ model: 'flux/pro', modalities: ['image'], image_config: { aspect_ratio: '1:1' } });
+    expect(JSON.parse(opts.body)).toMatchObject({
+      model: 'flux/pro',
+      modalities: ['image'],
+      image_config: { aspect_ratio: '1:1' },
+      usage: { include: true },
+    });
+    expect(usage).toMatchObject({ totalTokens: 1298, cost: 0.039 });
   });
 
   it('generateImage throws when no image is returned', async () => {

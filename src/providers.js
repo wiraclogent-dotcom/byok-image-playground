@@ -3,6 +3,11 @@
 //  - "openai":     image generation via /images/generations (OpenAI-compatible)
 // Adding another OpenAI-compatible gateway = adding one entry here.
 
+import { extractUsage } from './usage.js';
+
+// SemutSSH image model prices (USD per 1M tokens) from https://semutssh.com/docs/ai/models/
+const SEMUT_IMAGE_PRICE = { input: 5, output: 0 };
+
 export const PROVIDERS = {
   openrouter: {
     id: 'openrouter',
@@ -17,6 +22,12 @@ export const PROVIDERS = {
     baseUrl: 'https://ai.semutssh.com',
     style: 'openai',
     keyHint: 'sk-semut-...',
+    usageUrl: 'https://app.semutssh.com',
+    defaultPrices: {
+      'gpt-image-2': SEMUT_IMAGE_PRICE,
+      'gpt-image-2.5-flare': SEMUT_IMAGE_PRICE,
+      'gpt-image-2.5-sunburst': SEMUT_IMAGE_PRICE,
+    },
   },
   custom: {
     id: 'custom',
@@ -43,7 +54,8 @@ export function errorMessage(status, data) {
     (typeof data?.error === 'string' ? data.error : '') ||
     data?.raw ||
     '';
-  const msg = String(raw).slice(0, 300);
+  // Keep provider errors whole (they often name the fix); only cap huge bodies like HTML pages.
+  const msg = String(raw).slice(0, 1500);
   return `HTTP ${status}${msg ? `: ${msg}` : ''}`;
 }
 
@@ -71,7 +83,14 @@ async function request(baseUrl, apiKey, path, { method = 'GET', body } = {}) {
   return data;
 }
 
-// Normalize a /models response into [{ id, name, isImage, textOutput }]
+// OpenRouter pricing is USD per token (strings) -> USD per 1M tokens
+function perMillion(pricing) {
+  if (!pricing || (pricing.prompt == null && pricing.completion == null)) return null;
+  const conv = (v) => Number((Number(v || 0) * 1e6).toPrecision(6));
+  return { input: conv(pricing.prompt), output: conv(pricing.completion) };
+}
+
+// Normalize a /models response into [{ id, name, isImage, textOutput, price }]
 export function parseModels(data) {
   const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
   return list
@@ -84,6 +103,7 @@ export function parseModels(data) {
         name: m.name || m.id,
         isImage: hasModalities ? out.includes('image') : IMAGE_ID_PATTERN.test(m.id),
         textOutput: hasModalities ? out.includes('text') : true,
+        price: perMillion(m.pricing),
       };
     })
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -118,7 +138,7 @@ export function extractImages(style, data) {
     .filter(Boolean);
 }
 
-// Returns an array of image URLs or throws.
+// Returns { images: string[], usage: {...} | null } or throws.
 export async function generateImage(provider, baseUrl, apiKey, { model, prompt, ratio, textOutput = true }) {
   if (!apiKey) throw new Error('API key belum diisi.');
   if (!model) throw new Error('Model belum dipilih.');
@@ -132,6 +152,7 @@ export async function generateImage(provider, baseUrl, apiKey, { model, prompt, 
         messages: [{ role: 'user', content: prompt }],
         modalities: textOutput ? ['image', 'text'] : ['image'],
         image_config: { aspect_ratio: ratio },
+        usage: { include: true }, // ask OpenRouter to return token counts + cost
       },
     });
   } else {
@@ -148,5 +169,5 @@ export async function generateImage(provider, baseUrl, apiKey, { model, prompt, 
       `Model tidak mengembalikan gambar.${text ? ` Respons: ${String(text).slice(0, 200)}` : ''}`
     );
   }
-  return images;
+  return { images, usage: extractUsage(data) };
 }

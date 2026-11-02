@@ -31,6 +31,14 @@ https://wiraclogent-dotcom.github.io/byok-image-playground/
 Setiap push ke `main` otomatis di-test, di-build, dan di-deploy oleh `.github/workflows/deploy.yml`.
 Setup sekali: **Settings → Pages → Source: GitHub Actions**.
 
+## Monitoring token & biaya
+
+- Setiap hasil generate menampilkan token input/output/total dan biaya (USD + Rupiah), plus `usage` mentah dari provider.
+- **OpenRouter**: biaya **aktual** dari respons (`usage.cost`).
+- **SemutSSH / Custom**: biaya **perkiraan** = token × harga per 1M token. Harga default model gambar SemutSSH ($5 input / $0 output per 1M) diambil dari [dokumentasi SemutSSH](https://semutssh.com/docs/ai/models/); bisa diubah di Pengaturan.
+- Panel **Monitoring** merangkum total generate, token, dan biaya per model; tersimpan di localStorage (hanya angka, bukan gambar). Kurs Rp/$ bisa diubah.
+- Sisa budget SemutSSH tidak tersedia lewat API — cek di dashboard [app.semutssh.com](https://app.semutssh.com) → AI Service.
+
 ## Keamanan key
 
 - Key disimpan di `localStorage` browser masing-masing pengunjung (per provider) dan hanya dikirim langsung ke provider yang dipilih — tidak pernah ke GitHub atau server lain.
@@ -42,11 +50,13 @@ Setup sekali: **Settings → Pages → Source: GitHub Actions**.
 ```
 src/
   providers.js       preset provider + adapter (openrouter / openai) + parsing respons
-  storage.js         simpan/muat state di localStorage
+  usage.js           parsing usage token, hitung biaya, ringkasan, format USD/IDR
+  storage.js         simpan/muat state & log usage di localStorage
   App.jsx            state utama, layout dua kolom
-  Settings.jsx       provider, API key, tes koneksi, pilih model
+  Settings.jsx       provider, API key, tes koneksi, pilih model, harga model
+  Usage.jsx          panel monitoring token & biaya
   Playground.jsx     prompt, rasio, generate, galeri hasil (per sesi)
-  providers.test.js  unit test (npm test)
+  *.test.js          unit test (npm test)
 ```
 
 ## Test

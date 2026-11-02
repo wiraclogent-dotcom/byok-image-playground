@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { PROVIDERS, testConnection } from './providers.js';
 
+const PRICE_SOURCE_LABEL = {
+  manual: 'Sumber: diisi manual (kosongkan untuk kembali ke default).',
+  models: 'Sumber: daftar model provider.',
+  docs: 'Sumber: dokumentasi harga provider.',
+};
+
 export default function Settings({
   provider,
   config,
@@ -10,6 +16,11 @@ export default function Settings({
   onChange,
   onModels,
   onStatus,
+  price,
+  basePrice,
+  priceOverride,
+  priceSource,
+  onPriceChange,
 }) {
   const [showKey, setShowKey] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -138,6 +149,32 @@ export default function Settings({
           spellCheck={false}
         />
       </label>
+
+      {config.model && (
+        <fieldset className="field price">
+          <legend>Harga model (USD per 1M token)</legend>
+          <div className="row">
+            {['input', 'output'].map((field) => (
+              <label key={field} className="price-input">
+                <span className="muted small">{field === 'input' ? 'Input' : 'Output'} $</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  aria-label={`Harga ${field} per 1M token`}
+                  placeholder={basePrice ? String(basePrice[field]) : '0'}
+                  value={priceOverride?.[field] ?? ''}
+                  onChange={(e) => onPriceChange(field, e.target.value.trim().replace(',', '.'))}
+                />
+              </label>
+            ))}
+          </div>
+          <p className="muted small">{PRICE_SOURCE_LABEL[priceSource] || 'Harga belum diketahui — isi manual untuk estimasi biaya.'}</p>
+          {provider.style === 'openrouter' && (
+            <p className="muted small">OpenRouter mengirim biaya aktual di setiap respons; harga ini hanya cadangan.</p>
+          )}
+          {!price && <p className="muted small">Tanpa harga, hanya jumlah token yang ditampilkan.</p>}
+        </fieldset>
+      )}
     </section>
   );
 }

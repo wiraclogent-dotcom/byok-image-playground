@@ -40,6 +40,7 @@ body { margin: 0; background: var(--bg); }
 .header h1 { font-size: 20px; margin: 0; }
 
 .layout { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+.sidebar { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
 
 .panel {
@@ -133,3 +134,35 @@ button.ghost { background: transparent; }
   animation: pulse 1.4s ease-in-out infinite;
 }
 @keyframes pulse { 50% { opacity: 0.5; } }
+
+/* Price fields */
+.price { border: none; margin: 0; padding: 0; }
+.price legend { padding: 0; margin-bottom: 6px; }
+.price-input { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.price-input input { min-width: 0; }
+.price-input > span { white-space: nowrap; }
+.price .small { margin-top: 4px; }
+
+/* Monitoring panel */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats > div { background: var(--bg); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; min-width: 0; }
+.stat-value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat-label { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.usage-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.usage-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--border); }
+.usage-table td { padding: 6px 6px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.usage-table th:not(:first-child), .usage-table td:not(:first-child) { text-align: right; white-space: nowrap; }
+.model-cell { display: block; overflow-wrap: anywhere; }
+.rate { display: flex; align-items: center; gap: 6px; }
+.rate input { width: 90px; }
+.panel a { color: var(--accent); }
+
+/* Per-result usage */
+.usage-line { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
+.usage-line p { margin: 0; }
+.usage-line details { margin-top: 2px; }
+.usage-line summary { cursor: pointer; font-size: 12px; }
+.usage-line pre { margin: 4px 0 0; padding: 6px; background: var(--panel); border-radius: 6px; font-size: 11px; overflow-x: auto; max-height: 160px; }
+.badge { font-size: 11px; padding: 1px 6px; border-radius: 999px; font-weight: 600; }
+.badge-actual { background: var(--ok-bg); color: var(--ok-text); }
+.badge-estimate { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
