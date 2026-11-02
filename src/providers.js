@@ -56,10 +56,18 @@ export function errorMessage(status, data) {
     '';
   // Keep provider errors whole (they often name the fix); only cap huge bodies like HTML pages.
   const msg = String(raw).slice(0, 1500);
-  return `HTTP ${status}${msg ? `: ${msg}` : ''}`;
+  const hint =
+    status === 429
+      ? ' — Provider sedang membatasi request (rate limit). Tunggu 1–2 menit lalu coba lagi; kalau terus terjadi, hubungi provider.'
+      : '';
+  return `HTTP ${status}${msg ? `: ${msg}` : ''}${hint}`;
 }
 
-async function request(baseUrl, apiKey, path, { method = 'GET', body } = {}) {
+// LiteLLM-based gateways (e.g. SemutSSH) expose this header when they reroute a request to another model.
+const ROUTER_HEADER = 'x-litellm-adaptive-router-model';
+
+// `meta` (optional) is filled with diagnostics: { routedModel }
+async function request(baseUrl, apiKey, path, { method = 'GET', body, meta } = {}) {
   if (!baseUrl) throw new Error('Base URL belum diisi.');
   const url = baseUrl.replace(/\/+$/, '') + path;
   const headers = { Authorization: `Bearer ${apiKey}` };
@@ -72,6 +80,7 @@ async function request(baseUrl, apiKey, path, { method = 'GET', body } = {}) {
     throw new Error('Gagal menghubungi provider — cek base URL atau CORS.');
   }
 
+  if (meta) meta.routedModel = res.headers?.get?.(ROUTER_HEADER) || null;
   const text = await res.text();
   let data;
   try {
@@ -143,23 +152,32 @@ export async function generateImage(provider, baseUrl, apiKey, { model, prompt, 
   if (!apiKey) throw new Error('API key belum diisi.');
   if (!model) throw new Error('Model belum dipilih.');
 
+  const meta = {};
   let data;
-  if (provider.style === 'openrouter') {
-    data = await request(baseUrl, apiKey, '/chat/completions', {
-      method: 'POST',
-      body: {
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        modalities: textOutput ? ['image', 'text'] : ['image'],
-        image_config: { aspect_ratio: ratio },
-        usage: { include: true }, // ask OpenRouter to return token counts + cost
-      },
-    });
-  } else {
-    data = await request(baseUrl, apiKey, '/images/generations', {
-      method: 'POST',
-      body: { model, prompt, size: RATIOS[ratio] || RATIOS['1:1'], n: 1 },
-    });
+  try {
+    if (provider.style === 'openrouter') {
+      data = await request(baseUrl, apiKey, '/chat/completions', {
+        method: 'POST',
+        meta,
+        body: {
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          modalities: textOutput ? ['image', 'text'] : ['image'],
+          image_config: { aspect_ratio: ratio },
+          usage: { include: true }, // ask OpenRouter to return token counts + cost
+        },
+      });
+    } else {
+      data = await request(baseUrl, apiKey, '/images/generations', {
+        method: 'POST',
+        meta,
+        body: { model, prompt, size: RATIOS[ratio] || RATIOS['1:1'], n: 1 },
+      });
+    }
+  } catch (err) {
+    // Diagnostics: say exactly which model left the app and where the gateway sent it.
+    const routed = meta.routedModel ? ` · dirutekan provider ke: ${meta.routedModel}` : '';
+    throw new Error(`${err.message} [model dikirim: ${model}${routed}]`);
   }
 
   const images = extractImages(provider.style, data);
@@ -169,5 +187,5 @@ export async function generateImage(provider, baseUrl, apiKey, { model, prompt, 
       `Model tidak mengembalikan gambar.${text ? ` Respons: ${String(text).slice(0, 200)}` : ''}`
     );
   }
-  return { images, usage: extractUsage(data) };
+  return { images, usage: extractUsage(data), routedModel: meta.routedModel || null };
 }

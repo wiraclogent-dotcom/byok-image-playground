@@ -67,15 +67,52 @@ describe('errorMessage', () => {
     expect(errorMessage(500, { raw: 'x'.repeat(5000) })).toHaveLength('HTTP 500: '.length + 1500);
     expect(errorMessage(404, {})).toBe('HTTP 404');
   });
+
+  it('explains rate limits (429)', () => {
+    expect(errorMessage(429, { error: { message: 'Rate limit exceeded.' } })).toBe(
+      'HTTP 429: Rate limit exceeded. — Provider sedang membatasi request (rate limit). Tunggu 1–2 menit lalu coba lagi; kalau terus terjadi, hubungi provider.'
+    );
+  });
 });
 
 describe('network calls', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  const jsonResponse = (status, body) => ({
+  const jsonResponse = (status, body, headers = {}) => ({
     ok: status >= 200 && status < 300,
     status,
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
     text: async () => JSON.stringify(body),
+  });
+
+  it('generateImage error names the model sent and where the provider routed it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(400, { error: { message: 'bad' } }, { 'x-litellm-adaptive-router-model': 'gpt-image-2.5-sunburst' })
+      )
+    );
+    await expect(
+      generateImage(PROVIDERS.semutssh, 'https://a', 'k', { model: 'gpt-image-2', prompt: 'p', ratio: '1:1' })
+    ).rejects.toThrow('HTTP 400: bad [model dikirim: gpt-image-2 · dirutekan provider ke: gpt-image-2.5-sunburst]');
+  });
+
+  it('generateImage error names the model sent when there is no routing header', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(400, { error: { message: 'bad' } })));
+    await expect(
+      generateImage(PROVIDERS.semutssh, 'https://a', 'k', { model: 'gpt-image-2', prompt: 'p', ratio: '1:1' })
+    ).rejects.toThrow('HTTP 400: bad [model dikirim: gpt-image-2]');
+  });
+
+  it('generateImage reports routedModel on success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(200, { data: [{ url: 'https://x/a.png' }] }, { 'x-litellm-adaptive-router-model': 'gpt-image-2-x' })
+      )
+    );
+    const res = await generateImage(PROVIDERS.semutssh, 'https://a', 'k', { model: 'gpt-image-2', prompt: 'p', ratio: '1:1' });
+    expect(res.routedModel).toBe('gpt-image-2-x');
   });
 
   it('testConnection (openai style) hits /models with Bearer key', async () => {
@@ -117,7 +154,7 @@ describe('network calls', () => {
   it('generateImage returns usage: null when provider omits it', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { data: [{ url: 'https://x/a.png' }] })));
     const res = await generateImage(PROVIDERS.semutssh, 'https://a', 'k', { model: 'm', prompt: 'p', ratio: '1:1' });
-    expect(res).toEqual({ images: ['https://x/a.png'], usage: null });
+    expect(res).toEqual({ images: ['https://x/a.png'], usage: null, routedModel: null });
   });
 
   it('generateImage (openrouter) uses chat/completions with modalities', async () => {

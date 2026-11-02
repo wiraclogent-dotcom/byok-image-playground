@@ -17,7 +17,7 @@ export default function Playground({ provider, config, textOutput, price, idrRat
     setError('');
     const started = performance.now();
     try {
-      const { images, usage } = await generateImage(provider, config.baseUrl, config.apiKey, {
+      const { images, usage, routedModel } = await generateImage(provider, config.baseUrl, config.apiKey, {
         model: config.model,
         prompt: prompt.trim(),
         ratio,
@@ -45,6 +45,7 @@ export default function Playground({ provider, config, textOutput, price, idrRat
         src,
         prompt: prompt.trim(),
         model: config.model,
+        routedModel: routedModel && routedModel !== config.model ? routedModel : null,
         provider: provider.name,
         seconds,
         usage,
@@ -115,7 +116,8 @@ export default function Playground({ provider, config, textOutput, price, idrRat
               <figcaption>
                 <p className="caption-prompt">{r.prompt}</p>
                 <p className="muted small">
-                  {r.provider} · {r.model} · {r.seconds}s
+                  {r.provider} · {r.model}
+                  {r.routedModel && ` → dirutekan ke ${r.routedModel}`} · {r.seconds}s
                 </p>
                 <UsageLine usage={r.usage} cost={r.cost} idrRate={idrRate} batchSize={r.batchSize} />
                 <a href={r.src} download={`image-${r.id}.png`} target="_blank" rel="noreferrer">
