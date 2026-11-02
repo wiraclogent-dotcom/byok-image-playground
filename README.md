@@ -35,7 +35,7 @@ Setup sekali: **Settings → Pages → Source: GitHub Actions**.
 
 - Setiap hasil generate menampilkan token input/output/total dan biaya (USD + Rupiah), plus `usage` mentah dari provider.
 - **OpenRouter**: biaya **aktual** dari respons (`usage.cost`).
-- **SemutSSH / Custom**: biaya **perkiraan** = token × harga per 1M token. Harga default model gambar SemutSSH ($5 input / $0 output per 1M) diambil dari [dokumentasi SemutSSH](https://semutssh.com/docs/ai/models/); bisa diubah di Pengaturan.
+- **SemutSSH / Custom**: biaya **perkiraan** = token × harga per 1M token. Default `gpt-image-2` di SemutSSH: **$5 input / $30 output per 1M** — dihitung dari spend log SemutSSH dan sama dengan harga OpenAI (dokumentasi SemutSSH menulis output $0, itu keliru). Model lain: isi harga manual di Pengaturan.
 - Panel **Monitoring** merangkum total generate, token, dan biaya per model; tersimpan di localStorage (hanya angka, bukan gambar). Kurs Rp/$ bisa diubah.
 - Sisa budget SemutSSH tidak tersedia lewat API — cek di dashboard [app.semutssh.com](https://app.semutssh.com) → AI Service.
 

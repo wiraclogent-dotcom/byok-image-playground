@@ -5,8 +5,14 @@
 
 import { extractUsage } from './usage.js';
 
-// SemutSSH image model prices (USD per 1M tokens) from https://semutssh.com/docs/ai/models/
-const SEMUT_IMAGE_PRICE = { input: 5, output: 0 };
+// SemutSSH bills gpt-image-2 at OpenAI rates: $5 / 1M text input, $30 / 1M image output.
+// Verified against SemutSSH spend logs (22 in + 343 out = $0.010400; 22 in + 515 out = $0.015560).
+// Their docs list output as $0, which is wrong. No defaults for models without billing evidence.
+const GPT_IMAGE_2_PRICE = {
+  input: 5,
+  output: 30,
+  source: 'spend log SemutSSH (Nov 2026) = harga OpenAI $5 input / $30 output gambar',
+};
 
 export const PROVIDERS = {
   openrouter: {
@@ -24,9 +30,7 @@ export const PROVIDERS = {
     keyHint: 'sk-semut-...',
     usageUrl: 'https://app.semutssh.com',
     defaultPrices: {
-      'gpt-image-2': SEMUT_IMAGE_PRICE,
-      'gpt-image-2.5-flare': SEMUT_IMAGE_PRICE,
-      'gpt-image-2.5-sunburst': SEMUT_IMAGE_PRICE,
+      'gpt-image-2': GPT_IMAGE_2_PRICE,
     },
   },
   custom: {

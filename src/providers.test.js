@@ -7,6 +7,7 @@ import {
   parseModels,
   testConnection,
 } from './providers.js';
+import { estimateCost } from './usage.js';
 
 describe('parseModels', () => {
   it('uses OpenRouter output_modalities when present', () => {
@@ -42,6 +43,19 @@ describe('parseModels', () => {
   it('returns [] for unexpected shapes', () => {
     expect(parseModels(null)).toEqual([]);
     expect(parseModels({ data: 'nope' })).toEqual([]);
+  });
+});
+
+describe('SemutSSH default prices', () => {
+  it('gpt-image-2 matches billed amounts from SemutSSH spend logs', () => {
+    const price = PROVIDERS.semutssh.defaultPrices['gpt-image-2'];
+    expect(estimateCost({ inputTokens: 22, outputTokens: 343 }, price)).toBeCloseTo(0.0104, 10);
+    expect(estimateCost({ inputTokens: 22, outputTokens: 515 }, price)).toBeCloseTo(0.01556, 10);
+    expect(price.source).toMatch(/spend log/i);
+  });
+
+  it('has no made-up defaults for models without billing evidence', () => {
+    expect(PROVIDERS.semutssh.defaultPrices['gpt-image-2.5-sunburst']).toBeUndefined();
   });
 });
 

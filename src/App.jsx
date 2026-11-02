@@ -81,6 +81,7 @@ export default function App() {
             basePrice={basePrice}
             priceOverride={priceOverride}
             priceSource={priceSource}
+            priceNote={docsPrice?.source}
             onPriceChange={updatePrice}
           />
           <Usage

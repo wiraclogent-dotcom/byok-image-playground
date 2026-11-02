@@ -4,7 +4,7 @@ import { PROVIDERS, testConnection } from './providers.js';
 const PRICE_SOURCE_LABEL = {
   manual: 'Sumber: diisi manual (kosongkan untuk kembali ke default).',
   models: 'Sumber: daftar model provider.',
-  docs: 'Sumber: dokumentasi harga provider.',
+  docs: 'Sumber: harga default provider.',
 };
 
 export default function Settings({
@@ -20,6 +20,7 @@ export default function Settings({
   basePrice,
   priceOverride,
   priceSource,
+  priceNote,
   onPriceChange,
 }) {
   const [showKey, setShowKey] = useState(false);
@@ -168,7 +169,11 @@ export default function Settings({
               </label>
             ))}
           </div>
-          <p className="muted small">{PRICE_SOURCE_LABEL[priceSource] || 'Harga belum diketahui — isi manual untuk estimasi biaya.'}</p>
+          <p className="muted small">
+            {priceSource === 'docs' && priceNote
+              ? `Sumber: ${priceNote}.`
+              : PRICE_SOURCE_LABEL[priceSource] || 'Harga belum diketahui — isi manual untuk estimasi biaya.'}
+          </p>
           {provider.style === 'openrouter' && (
             <p className="muted small">OpenRouter mengirim biaya aktual di setiap respons; harga ini hanya cadangan.</p>
           )}
