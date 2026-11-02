@@ -24,10 +24,17 @@ Buka http://localhost:5173
 - **Daftar model**: default hanya model gambar (OpenRouter dari `output_modalities`, lainnya dari nama ID). Centang "Tampilkan semua model" atau ketik ID manual kalau model tidak terdeteksi.
 - Menambah gateway OpenAI-compatible lain: tambahkan satu entri di `PROVIDERS` pada `src/providers.js`.
 
+## Live (GitHub Pages)
+
+https://wiraclogent-dotcom.github.io/byok-image-playground/
+
+Setiap push ke `main` otomatis di-test, di-build, dan di-deploy oleh `.github/workflows/deploy.yml`.
+Setup sekali: **Settings → Pages → Source: GitHub Actions**.
+
 ## Keamanan key
 
-- Key disimpan di `localStorage` browser (per provider) dan hanya dikirim ke provider yang dipilih.
-- Tidak ada backend. Jangan deploy app ini ke publik — ini untuk pemakaian lokal.
+- Key disimpan di `localStorage` browser masing-masing pengunjung (per provider) dan hanya dikirim langsung ke provider yang dipilih — tidak pernah ke GitHub atau server lain.
+- Tidak ada backend, jadi aman di-host statis (GitHub Pages). Tetap gunakan key dengan limit/budget, dan hapus key dari browser yang dipakai bersama.
 - Provider Custom harus mengizinkan CORS dari browser; kalau tidak, akan muncul pesan "Gagal menghubungi provider".
 
 ## Struktur
