@@ -31,6 +31,13 @@ https://wiraclogent-dotcom.github.io/byok-image-playground/
 Setiap push ke `main` otomatis di-test, di-build, dan di-deploy oleh `.github/workflows/deploy.yml`.
 Setup sekali: **Settings → Pages → Source: GitHub Actions**.
 
+## Kontrol generate
+
+- **SemutSSH / Custom (gpt-image-2)**: Ukuran (Auto, 1024², 1536×1024, 1024×1536, 2K, 4K eksperimental), Kualitas (Auto/Low/Medium/High — pengaruh terbesar ke biaya), Format (PNG/JPEG/WebP). Opsi default (auto, png) tidak dikirim ke API.
+- **OpenRouter**: rasio 1:1 / 3:2 / 2:3.
+- **Style preset** (semua provider): teks style ditambahkan ke prompt; prompt final bisa dilihat sebelum generate.
+- **Background transparan (chroma key)**: gpt-image-2 tidak mendukung `background: transparent`. Kalau dicentang, prompt meminta background warna solid (default `#FF00FF`), lalu warna itu dihapus di browser → download PNG transparan. Toleransi bisa diatur dan hasil bisa diproses ulang; tepi diberi despill supaya tidak ada fringe warna.
+
 ## Monitoring token & biaya
 
 - Setiap hasil generate menampilkan token input/output/total dan biaya (USD + Rupiah), plus `usage` mentah dari provider.
@@ -51,6 +58,10 @@ Setup sekali: **Settings → Pages → Source: GitHub Actions**.
 src/
   providers.js       preset provider + adapter (openrouter / openai) + parsing respons
   usage.js           parsing usage token, hitung biaya, ringkasan, format USD/IDR
+  options.js         daftar ukuran/kualitas/format/style + penyusun prompt final
+  chromaKey.js       hapus background warna solid (canvas) + despill
+  Controls.jsx       kontrol generate (ukuran, kualitas, format, style, chroma key)
+  ResultCard.jsx     kartu hasil: gambar, token, biaya, download
   storage.js         simpan/muat state & log usage di localStorage
   App.jsx            state utama, layout dua kolom
   Settings.jsx       provider, API key, tes koneksi, pilih model, harga model

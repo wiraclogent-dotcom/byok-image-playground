@@ -165,6 +165,41 @@ describe('network calls', () => {
     expect(usage).toMatchObject({ inputTokens: 5, outputTokens: 100, totalTokens: 105, cost: null });
   });
 
+  it('generateImage (openai) sends size, quality and output_format when chosen', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(200, { data: [{ b64_json: 'J' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { images } = await generateImage(PROVIDERS.semutssh, 'https://a', 'k', {
+      model: 'gpt-image-2',
+      prompt: 'p',
+      size: '2048x1152',
+      quality: 'high',
+      format: 'jpeg',
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      model: 'gpt-image-2',
+      prompt: 'p',
+      size: '2048x1152',
+      quality: 'high',
+      output_format: 'jpeg',
+      n: 1,
+    });
+    // gateway did not echo output_format -> use the requested one for the data URL
+    expect(images).toEqual(['data:image/jpeg;base64,J']);
+  });
+
+  it('generateImage (openai) omits auto size/quality and default png format', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(200, { data: [{ b64_json: 'J' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+    await generateImage(PROVIDERS.semutssh, 'https://a', 'k', {
+      model: 'gpt-image-2',
+      prompt: 'p',
+      size: 'auto',
+      quality: 'auto',
+      format: 'png',
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ model: 'gpt-image-2', prompt: 'p', n: 1 });
+  });
+
   it('generateImage returns usage: null when provider omits it', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { data: [{ url: 'https://x/a.png' }] })));
     const res = await generateImage(PROVIDERS.semutssh, 'https://a', 'k', { model: 'm', prompt: 'p', ratio: '1:1' });

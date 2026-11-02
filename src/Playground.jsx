@@ -1,38 +1,69 @@
 import { useState } from 'react';
-import { RATIOS, generateImage } from './providers.js';
-import { formatIDR, formatTokens, formatUSD, resolveCost } from './usage.js';
+import { generateImage } from './providers.js';
+import { STYLES, buildPrompt } from './options.js';
+import { removeBackground } from './chromaKey.js';
+import { resolveCost } from './usage.js';
+import Controls from './Controls.jsx';
+import ResultCard from './ResultCard.jsx';
+
+const DEFAULT_OPTIONS = {
+  ratio: '1:1',
+  size: '1024x1024',
+  quality: 'auto',
+  format: 'png',
+  styleId: 'none',
+  chroma: { enabled: false, color: '#FF00FF', tolerance: 25 },
+};
+
+async function keyOut(src, chroma) {
+  try {
+    const { src: keyedSrc } = await removeBackground(src, chroma.color, chroma.tolerance);
+    return { keyedSrc, chromaError: null };
+  } catch (err) {
+    return { keyedSrc: null, chromaError: err.message };
+  }
+}
 
 export default function Playground({ provider, config, textOutput, price, idrRate, onRecord }) {
   const [prompt, setPrompt] = useState('');
-  const [ratio, setRatio] = useState('1:1');
+  const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [results, setResults] = useState([]); // session only
 
+  const isOpenAI = provider.style === 'openai';
+  const finalPrompt = buildPrompt(prompt, { styleId: options.styleId, chromaKey: options.chroma });
   const canGenerate = config.apiKey && config.model && prompt.trim() && !loading;
+  const updateOptions = (patch) => setOptions((o) => ({ ...o, ...patch }));
 
   async function handleGenerate() {
     if (!canGenerate) return;
     setLoading(true);
     setError('');
     const started = performance.now();
+    const opts = options; // snapshot for this request
     try {
       const { images, usage, routedModel } = await generateImage(provider, config.baseUrl, config.apiKey, {
         model: config.model,
-        prompt: prompt.trim(),
-        ratio,
+        prompt: finalPrompt,
+        ratio: opts.ratio,
+        ...(isOpenAI ? { size: opts.size, quality: opts.quality, format: opts.format } : {}),
         textOutput,
       });
       const seconds = ((performance.now() - started) / 1000).toFixed(1);
       const cost = resolveCost(usage, price);
       const id = `${Date.now()}`;
+      const styleLabel = opts.styleId !== 'none' ? STYLES.find((s) => s.id === opts.styleId)?.label : null;
 
       onRecord({
         id,
         time: new Date().toISOString(),
         provider: provider.name,
         model: config.model,
-        ratio,
+        ratio: isOpenAI ? null : opts.ratio,
+        size: isOpenAI ? opts.size : null,
+        quality: isOpenAI ? opts.quality : null,
+        style: opts.styleId,
         inputTokens: usage?.inputTokens ?? null,
         outputTokens: usage?.outputTokens ?? null,
         totalTokens: usage?.totalTokens ?? null,
@@ -40,24 +71,39 @@ export default function Playground({ provider, config, textOutput, price, idrRat
         costKind: cost?.kind ?? null,
       });
 
-      const batch = images.map((src, i) => ({
-        id: `${id}-${i}`,
-        src,
-        prompt: prompt.trim(),
-        model: config.model,
-        routedModel: routedModel && routedModel !== config.model ? routedModel : null,
-        provider: provider.name,
-        seconds,
-        usage,
-        cost,
-        batchSize: images.length,
-      }));
+      const batch = await Promise.all(
+        images.map(async (src, i) => ({
+          id: `${id}-${i}`,
+          src,
+          ...(opts.chroma.enabled ? await keyOut(src, opts.chroma) : {}),
+          prompt: prompt.trim(),
+          model: config.model,
+          routedModel: routedModel && routedModel !== config.model ? routedModel : null,
+          provider: provider.name,
+          seconds,
+          ratio: isOpenAI ? null : opts.ratio,
+          size: isOpenAI ? opts.size : null,
+          quality: isOpenAI ? opts.quality : null,
+          format: isOpenAI ? opts.format : 'png',
+          styleLabel,
+          usage,
+          cost,
+          batchSize: images.length,
+        }))
+      );
       setResults((r) => [...batch, ...r]);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleReprocess(id) {
+    const item = results.find((r) => r.id === id);
+    if (!item) return;
+    const keyed = await keyOut(item.src, options.chroma);
+    setResults((rs) => rs.map((r) => (r.id === id ? { ...r, ...keyed } : r)));
   }
 
   return (
@@ -77,27 +123,23 @@ export default function Playground({ provider, config, textOutput, price, idrRat
         />
       </label>
 
+      <Controls isOpenAI={isOpenAI} values={options} onChange={updateOptions} />
+
+      {finalPrompt !== prompt.trim() && prompt.trim() && (
+        <details className="final-prompt">
+          <summary className="muted small">Lihat prompt final yang dikirim</summary>
+          <pre>{finalPrompt}</pre>
+        </details>
+      )}
+
       <div className="row between">
-        <div className="segmented" role="group" aria-label="Rasio">
-          {Object.keys(RATIOS).map((r) => (
-            <button
-              key={r}
-              type="button"
-              className={r === ratio ? 'active' : ''}
-              onClick={() => setRatio(r)}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
+        <p className="muted small">
+          {provider.name} · {config.model || 'belum ada model'} · Ctrl/⌘ + Enter untuk generate
+        </p>
         <button type="button" className="primary" onClick={handleGenerate} disabled={!canGenerate}>
           {loading ? 'Membuat gambar…' : 'Generate'}
         </button>
       </div>
-
-      <p className="muted small">
-        {provider.name} · {config.model || 'belum ada model'} · Ctrl/⌘ + Enter untuk generate
-      </p>
 
       {error && (
         <p className="status status-error" role="alert">
@@ -111,54 +153,10 @@ export default function Playground({ provider, config, textOutput, price, idrRat
         <div className="grid">
           {loading && <div className="card skeleton">Sedang membuat…</div>}
           {results.map((r) => (
-            <figure key={r.id} className="card">
-              <img src={r.src} alt={r.prompt} />
-              <figcaption>
-                <p className="caption-prompt">{r.prompt}</p>
-                <p className="muted small">
-                  {r.provider} · {r.model}
-                  {r.routedModel && ` → dirutekan ke ${r.routedModel}`} · {r.seconds}s
-                </p>
-                <UsageLine usage={r.usage} cost={r.cost} idrRate={idrRate} batchSize={r.batchSize} />
-                <a href={r.src} download={`image-${r.id}.png`} target="_blank" rel="noreferrer">
-                  Download
-                </a>
-              </figcaption>
-            </figure>
+            <ResultCard key={r.id} r={r} idrRate={idrRate} onReprocess={handleReprocess} />
           ))}
         </div>
       )}
     </section>
-  );
-}
-
-function UsageLine({ usage, cost, idrRate, batchSize }) {
-  if (!usage) {
-    return <p className="usage-line muted small">Token: provider tidak melaporkan token</p>;
-  }
-  return (
-    <div className="usage-line small">
-      <p>
-        Token: {formatTokens(usage.inputTokens)} in · {formatTokens(usage.outputTokens)} out ·{' '}
-        <strong>{formatTokens(usage.totalTokens)}</strong> total
-        {batchSize > 1 && <span className="muted"> (untuk {batchSize} gambar)</span>}
-      </p>
-      <p>
-        Biaya:{' '}
-        {cost ? (
-          <>
-            <strong>{formatUSD(cost.amount)}</strong>{' '}
-            <span className={`badge badge-${cost.kind}`}>{cost.kind === 'actual' ? 'aktual' : 'perkiraan'}</span>{' '}
-            ≈ {formatIDR(cost.amount, idrRate)}
-          </>
-        ) : (
-          <span className="muted">harga model belum diisi</span>
-        )}
-      </p>
-      <details>
-        <summary className="muted">usage mentah</summary>
-        <pre>{JSON.stringify(usage.raw, null, 2)}</pre>
-      </details>
-    </div>
   );
 }

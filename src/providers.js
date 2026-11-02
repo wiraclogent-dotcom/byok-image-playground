@@ -140,19 +140,33 @@ export async function testConnection(provider, baseUrl, apiKey) {
 }
 
 // Extract image URLs (data: or https:) from a provider response.
-export function extractImages(style, data) {
+// `requestedFormat` is used when the gateway does not echo `output_format`.
+export function extractImages(style, data, requestedFormat = 'png') {
   if (style === 'openrouter') {
     const msg = data?.choices?.[0]?.message;
     return (msg?.images || []).map((img) => img?.image_url?.url || img?.url).filter(Boolean);
   }
-  const fmt = data?.output_format || 'png';
+  const fmt = data?.output_format || requestedFormat;
   return (data?.data || [])
     .map((d) => (d?.b64_json ? `data:image/${fmt};base64,${d.b64_json}` : d?.url))
     .filter(Boolean);
 }
 
-// Returns { images: string[], usage: {...} | null } or throws.
-export async function generateImage(provider, baseUrl, apiKey, { model, prompt, ratio, textOutput = true }) {
+// OpenAI Images body: only send non-default options so stricter gateways don't choke on them.
+function openaiImageBody({ model, prompt, ratio, size, quality, format }) {
+  const body = { model, prompt };
+  const finalSize = size || RATIOS[ratio] || RATIOS['1:1'];
+  if (finalSize !== 'auto') body.size = finalSize;
+  if (quality && quality !== 'auto') body.quality = quality;
+  if (format && format !== 'png') body.output_format = format;
+  body.n = 1;
+  return body;
+}
+
+// Returns { images: string[], usage: {...} | null, routedModel } or throws.
+// options: model, prompt, ratio (openrouter), size / quality / format (openai style), textOutput (openrouter)
+export async function generateImage(provider, baseUrl, apiKey, options) {
+  const { model, prompt, ratio, format, textOutput = true } = options;
   if (!apiKey) throw new Error('API key belum diisi.');
   if (!model) throw new Error('Model belum dipilih.');
 
@@ -175,7 +189,7 @@ export async function generateImage(provider, baseUrl, apiKey, { model, prompt, 
       data = await request(baseUrl, apiKey, '/images/generations', {
         method: 'POST',
         meta,
-        body: { model, prompt, size: RATIOS[ratio] || RATIOS['1:1'], n: 1 },
+        body: openaiImageBody(options),
       });
     }
   } catch (err) {
@@ -184,7 +198,7 @@ export async function generateImage(provider, baseUrl, apiKey, { model, prompt, 
     throw new Error(`${err.message} [model dikirim: ${model}${routed}]`);
   }
 
-  const images = extractImages(provider.style, data);
+  const images = extractImages(provider.style, data, format);
   if (images.length === 0) {
     const text = data?.choices?.[0]?.message?.content;
     throw new Error(
